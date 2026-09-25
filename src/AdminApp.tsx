@@ -162,8 +162,11 @@ function Collections() {
     try {
       await authed.patch(`/admin/collections/${c.address}`, body);
       qc.invalidateQueries({ queryKey: ['admin-collections'] });
+      qc.invalidateQueries({ queryKey: ['admin-collection', c.address] });
+      return true;
     } catch (e: any) {
       toast(e.message, 'error');
+      return false;
     }
   }
   async function remove(c: Collection) {
@@ -235,22 +238,106 @@ function Collections() {
           </table>
         </div>
       )}
-      {edit && <EditCollection c={edit} onClose={() => setEdit(null)} onSave={(b) => patch(edit, b).then(() => setEdit(null))} />}
+      {edit && <EditCollection c={edit} onClose={() => setEdit(null)} onSave={(b) => patch(edit, b).then((ok) => { if (ok) { toast('Saved'); setEdit(null); } })} />}
     </>
   );
 }
 
-function EditCollection({ c, onClose, onSave }: { c: Collection; onClose: () => void; onSave: (b: Record<string, unknown>) => void }) {
-  const [f, setF] = useState({ name: c.name, slug: c.slug, description: c.description || '', image_url: c.image_url || '', banner_url: c.banner_url || '', twitter: c.twitter || '', discord: c.discord || '', telegram: (c as any).telegram || '', website: c.website || '' });
+type AboutItem = { label: string; value: string };
+type FullCollection = Collection & { telegram?: string | null; about?: string | null; about_image_url?: string | null; about_items?: AboutItem[] };
+const toHttp = (u: string) => (u.startsWith('ipfs://') ? `https://ipfs.io/ipfs/${u.slice(7)}` : u);
+
+function EditCollection({ c, onClose, onSave }: { c: Collection; onClose: () => void; onSave: (b: Record<string, unknown>) => Promise<unknown> | void }) {
+  const authed = useAuthedApi();
+  const [tab, setTab] = useState<'details' | 'about'>('details');
+  const [saving, setSaving] = useState(false);
+  // The list endpoint is trimmed; load the full row (including the About page) for editing.
+  const full = useQuery({ queryKey: ['admin-collection', c.address], queryFn: () => authed.get<{ collection: FullCollection }>(`/admin/collections/${c.address}`), retry: false });
+  const src: FullCollection = full.data?.collection ?? c;
+  const [f, setF] = useState<Record<string, string> | null>(null);
+  const [about, setAbout] = useState<{ text: string; image: string; items: AboutItem[] } | null>(null);
+  const details = f ?? { name: src.name, slug: src.slug, description: src.description || '', image_url: src.image_url || '', banner_url: src.banner_url || '', twitter: src.twitter || '', discord: src.discord || '', telegram: src.telegram || '', website: src.website || '' };
+  const ab = about ?? { text: src.about || '', image: src.about_image_url || '', items: src.about_items || [] };
+  const setItems = (items: AboutItem[]) => setAbout({ ...ab, items });
+  const labels: Record<string, string> = { name: 'Name', slug: 'URL slug', description: 'Short description (collection header)', image_url: 'Logo image URL', banner_url: 'Banner image URL', twitter: 'X (Twitter)', discord: 'Discord', telegram: 'Telegram', website: 'Website' };
+  const validImage = !ab.image || /^(https?:\/\/|ipfs:\/\/)\S+$/i.test(ab.image.trim());
+
+  async function save() {
+    setSaving(true);
+    try {
+      const nul = (v: string) => (v.trim() ? v.trim() : null);
+      await onSave({
+        ...details, image_url: nul(details.image_url), banner_url: nul(details.banner_url), twitter: nul(details.twitter), discord: nul(details.discord),
+        telegram: nul(details.telegram), website: nul(details.website),
+        about: nul(ab.text), about_image_url: nul(ab.image), about_items: ab.items.filter((x) => x.label.trim() && x.value.trim()),
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <Modal open onClose={onClose} title={`Edit ${c.name}`} width={560}>
-      {(Object.keys(f) as (keyof typeof f)[]).map((k) => (
-        <div className="field" key={k}>
-          <label>{k.replace('_', ' ')}</label>
-          {k === 'description' ? <textarea className="textarea" value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} /> : <input className="input" value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} />}
+    <Modal open onClose={onClose} title={`Edit ${c.name}`} width={720}>
+      <div className="segmented" role="tablist" style={{ marginBottom: 16, width: 'fit-content' }}>
+        <button role="tab" aria-pressed={tab === 'details'} onClick={() => setTab('details')}>Details</button>
+        <button role="tab" aria-pressed={tab === 'about'} onClick={() => setTab('about')}>About page</button>
+      </div>
+      {full.isLoading ? <Skeleton h={280} r={12} /> : tab === 'details' ? (
+        <div className="edit-grid">
+          {Object.keys(details).map((k) => (
+            <div className={`field ${k === 'description' ? 'edit-grid__wide' : ''}`} key={k}>
+              <label>{labels[k] || k}</label>
+              {k === 'description'
+                ? <textarea className="textarea" value={details[k]} onChange={(e) => setF({ ...details, [k]: e.target.value })} />
+                : <input className="input" value={details[k]} onChange={(e) => setF({ ...details, [k]: e.target.value })} />}
+            </div>
+          ))}
         </div>
-      ))}
-      <button className="btn btn--block" onClick={() => onSave({ ...f, image_url: f.image_url || null, banner_url: f.banner_url || null, twitter: f.twitter || null, discord: f.discord || null, telegram: f.telegram || null, website: f.website || null })}>Save</button>
+      ) : (
+        <div className="about-edit">
+          <p className="small muted" style={{ margin: 0 }}>Optional. Shown on the collection's About tab. Leave empty to show the short description instead.</p>
+          <div className="field">
+            <label>Story</label>
+            <textarea className="textarea" style={{ minHeight: 180 }} maxLength={8000} value={ab.text} placeholder={'Who made it, what it is about, what holders get…\n\nLeave a blank line between paragraphs.'} onChange={(e) => setAbout({ ...ab, text: e.target.value })} />
+            <span className="hint">{ab.text.length.toLocaleString()} / 8,000 · blank line = new paragraph</span>
+          </div>
+          <div className="field">
+            <label>Feature image URL</label>
+            <div className="about-edit__image">
+              <div className="about-edit__preview">{ab.image && validImage ? <img src={toHttp(ab.image.trim())} alt="" onError={(e) => ((e.target as HTMLImageElement).style.opacity = '0.2')} /> : <span className="tiny muted">16:9 · 1600×900 recommended</span>}</div>
+              <div style={{ display: 'grid', gap: 6, alignContent: 'start' }}>
+                <input className={`input ${validImage ? '' : 'input--invalid'}`} value={ab.image} placeholder="https://… or ipfs://…" onChange={(e) => setAbout({ ...ab, image: e.target.value })} />
+                <span className="hint">{validImage ? 'Falls back to the banner when empty.' : 'Use an https:// or ipfs:// link.'}</span>
+              </div>
+            </div>
+          </div>
+          <div className="field">
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <label>Details ({ab.items.length}/12)</label>
+              <button className="btn btn--outline btn--sm" disabled={ab.items.length >= 12} onClick={() => setItems([...ab.items, { label: '', value: '' }])}>Add row</button>
+            </div>
+            {ab.items.length === 0 && <p className="tiny muted" style={{ margin: 0 }}>Examples: Artist · Jane Kim, Utility · Holder-only events, Roadmap · Season 2 in Q1.</p>}
+            <div className="about-rows">
+              {ab.items.map((it, i) => (
+                <div className="about-row" key={i}>
+                  <input className="input" maxLength={40} placeholder="Label" value={it.label} onChange={(e) => setItems(ab.items.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
+                  <input className="input" maxLength={300} placeholder="Value" value={it.value} onChange={(e) => setItems(ab.items.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} />
+                  <div className="about-row__tools">
+                    <button className="icon-btn" title="Move up" aria-label="Move up" disabled={i === 0} onClick={() => { const a = [...ab.items]; [a[i - 1], a[i]] = [a[i], a[i - 1]]; setItems(a); }}>↑</button>
+                    <button className="icon-btn" title="Move down" aria-label="Move down" disabled={i === ab.items.length - 1} onClick={() => { const a = [...ab.items]; [a[i + 1], a[i]] = [a[i], a[i + 1]]; setItems(a); }}>↓</button>
+                    <button className="icon-btn" title="Remove" aria-label="Remove" onClick={() => setItems(ab.items.filter((_, j) => j !== i))}>×</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <a className="link small" href={`${SITE_URL}/collection/${c.slug}?tab=about`} target="_blank" rel="noreferrer">Open the live About tab ↗</a>
+        </div>
+      )}
+      <div className="row" style={{ marginTop: 18 }}>
+        <button className="btn btn--outline" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
+        <button className="btn" style={{ flex: 2 }} disabled={saving || !validImage || full.isLoading} onClick={save}>{saving && <span className="spinner" />}Save changes</button>
+      </div>
     </Modal>
   );
 }
