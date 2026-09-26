@@ -513,7 +513,7 @@ const NET_FIELDS: [string, string][] = [
 function Network() {
   const authed = useAuthedApi();
   const toast = useToast();
-  const q = useQuery({ queryKey: ['admin-networks'], queryFn: () => authed.get<{ networks: Net[] }>('/admin/networks') });
+  const q = useQuery({ queryKey: ['admin-networks'], queryFn: () => authed.get<{ networks: Net[]; locked?: boolean }>('/admin/networks') });
   const [adding, setAdding] = useState(false);
   async function activate(n: Net) {
     const typed = window.prompt(`Switch the WHOLE marketplace to "${n.name}" (chain ${n.chain_id})?\nType the key "${n.key}" to confirm.`);
@@ -529,10 +529,18 @@ function Network() {
   if (!q.data) return <Skeleton h={300} r={14} />;
   return (
     <>
-      <p className="notice">
-        To move to GIWA mainnet: deploy the contracts on mainnet, add the network here with its RPC and addresses, press Test, then Activate.
-        Every API instance, the indexer and the website switch within seconds. Testnet data is kept, so you can switch back.
-      </p>
+      {q.data.locked ? (
+        <p className="notice">
+          Locked for security: contract addresses and RPCs come from the server variables (Railway: MARKET_ADDRESS, RPC_URL, …), so even a
+          stolen admin session can't point the marketplace at other contracts. To edit here, set ALLOW_NETWORK_EDITS=1 on Railway, make the
+          change, then remove it again.
+        </p>
+      ) : (
+        <p className="notice">
+          To move to GIWA mainnet: deploy the contracts on mainnet, add the network here with its RPC and addresses, press Test, then Activate.
+          Every API instance, the indexer and the website switch within seconds. Testnet data is kept, so you can switch back.
+        </p>
+      )}
       {q.data.networks.map((n) => <NetworkCard key={n.key} n={n} onActivate={() => activate(n)} onSaved={() => q.refetch()} />)}
       {adding ? <NetworkCard n={{ key: '', chain_id: '', is_testnet: false, weth_address: '0x4200000000000000000000000000000000000006' }} isNew onSaved={() => { setAdding(false); q.refetch(); }} /> : <button className="btn btn--outline" style={{ justifySelf: 'start' }} onClick={() => setAdding(true)}>Add network</button>}
     </>

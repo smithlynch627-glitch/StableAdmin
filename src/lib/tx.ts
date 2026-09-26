@@ -2,11 +2,11 @@ import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAccount, useSignMessage } from 'wagmi';
 import { simulateContract, waitForTransactionReceipt, writeContract } from 'wagmi/actions';
-import { activeChain } from '../config';
+import { PINNED, activeChain } from '../config';
 import { useToast } from '../components/ui';
 import { useWalletUI } from '../components/Wallet';
 import { api, ApiError } from './api';
-import { ensureSession } from './session';
+import { withSession } from './session';
 import { wagmiConfig } from './wagmi';
 
 export function errorMessage(e: unknown): string {
@@ -23,17 +23,17 @@ export function errorMessage(e: unknown): string {
 export function useAuthedApi() {
   const { address } = useAccount();
   const { signMessageAsync } = useSignMessage();
-  const token = useCallback(async () => {
+  const call = async <T,>(fn: (tk: string) => Promise<T>): Promise<T> => {
     if (!address) throw new Error('Connect your wallet first');
-    return ensureSession(address, (message) => signMessageAsync({ message }));
-  }, [address, signMessageAsync]);
+    return withSession(address, (message) => signMessageAsync({ message }), fn);
+  };
   return {
-    get: async <T,>(path: string, params?: Record<string, any>) => api.get<T>(path, params, await token()),
-    post: async <T,>(path: string, body?: unknown) => api.post<T>(path, body, await token()),
-    put: async <T,>(path: string, body: unknown) => api.put<T>(path, body, await token()),
-    patch: async <T,>(path: string, body: unknown) => api.patch<T>(path, body, await token()),
-    del: async <T,>(path: string) => api.del<T>(path, await token()),
-    request: async <T,>(method: string, path: string, body: unknown) => api.request<T>(method, path, body, await token()),
+    get: <T,>(path: string, params?: Record<string, any>) => call((tk) => api.get<T>(path, params, tk)),
+    post: <T,>(path: string, body?: unknown) => call((tk) => api.post<T>(path, body, tk)),
+    put: <T,>(path: string, body: unknown) => call((tk) => api.put<T>(path, body, tk)),
+    patch: <T,>(path: string, body: unknown) => call((tk) => api.patch<T>(path, body, tk)),
+    del: <T,>(path: string) => call((tk) => api.del<T>(path, tk)),
+    request: <T,>(method: string, path: string, body: unknown) => call((tk) => api.request<T>(method, path, body, tk)),
   };
 }
 
@@ -48,6 +48,11 @@ export function useTx() {
     if (!(await ensureReady()) || !address) return null;
     setBusy(label);
     try {
+      // Only the pinned STABLE contracts, on the pinned chain (a tampered API can't redirect admin transactions).
+      if (PINNED.contracts.length && !PINNED.contracts.includes(String(params.address).toLowerCase())) {
+        throw new Error(`Security check: ${params.address} is not one of the STABLE contracts built into this admin site. Nothing was sent.`);
+      }
+      if (PINNED.chainId && activeChain.id !== PINNED.chainId) throw new Error(`Security check: the API reports chain ${activeChain.id}, this admin site is built for ${PINNED.chainId}. Nothing was sent.`);
       const { request } = await simulateContract(wagmiConfig, { ...params, account: address, chainId: activeChain.id });
       const hash = await writeContract(wagmiConfig, request as any);
       const receipt = await waitForTransactionReceipt(wagmiConfig, { hash, chainId: activeChain.id });
