@@ -7,6 +7,8 @@ interface ImportMetaEnv {
   readonly VITE_MARKET_ADDRESS?: string;
   readonly VITE_FACTORY_ADDRESSES?: string;
   readonly VITE_FEE_VAULT_ADDRESS?: string;
+  readonly VITE_SAFE_ADDRESS?: string;
+  readonly VITE_WETH_ADDRESS?: string;
 }
 interface ImportMeta {
   readonly env: ImportMetaEnv;

@@ -18,12 +18,43 @@ Backend `.env` must include `ADMIN_ORIGINS=http://localhost:5174` (and your prod
 ## Deploy on Netlify (its own site)
 
 1. New site from the same repo: base directory `admin`, build `npm run build`, publish `admin/dist`.
-2. Environment: `VITE_API_URL` (Railway API URL), `VITE_SITE_URL` (public marketplace URL).
-3. Use a hard-to-guess subdomain, e.g. `ops-<random>.yourdomain.com`. Don't link it from the public site.
+2. Environment (see `.env.example`): `VITE_API_URL`, `VITE_CHAIN_ID`, `VITE_RPC_URL`, `VITE_MARKET_ADDRESS`,
+   `VITE_FACTORY_ADDRESSES`, `VITE_FEE_VAULT_ADDRESS`, `VITE_SAFE_ADDRESS`, `VITE_SITE_URL`. A production build stops if a
+   security pin is missing; without `VITE_SAFE_ADDRESS` the Multisig and Treasury pages stay read-only.
+3. Use a hard-to-guess subdomain. Don't link it from the public site.
 4. Add its URL to the backend's `ADMIN_ORIGINS` and redeploy the API.
 5. Extra layer (recommended): Netlify **Site protection → Password** (Pro plan), or Cloudflare Access in front of it.
 
 `netlify.toml` already sets a strict CSP, no-index, no caching of pages, and anti-framing headers.
+
+## Sections
+
+| Section | What it does | Role |
+|---|---|---|
+| Overview | Marketplace / launchpad / Safe / FeeVault status, sales chart, what needs attention, recent admin activity | support |
+| Treasury | FeeVault and Safe balances, fees per day, withdraw from the FeeVault, send from the Safe, withdrawal status and on-chain history | admin |
+| Multisig | Safe owners, threshold, security checks, transaction queue (sign / execute), history (also actions done with `safe-tx.ps1`), emergency pause, owner changes | admin |
+| Collections | Search and filter, verified / featured / hidden / mint page, block or enable trading, edit details and About page, refresh, remove | admin |
+| Import | Bring existing ERC-721 collections on the network into STABLE | admin |
+| Contracts & fees | Trading fee, mint fee, pause and resume, guardian | admin |
+| Support | User tickets | support |
+| Activity log | Every admin action, filters, search, CSV export | admin |
+| Site settings, Team, Network | Footer links, who can sign in, chain and contracts | admin / owner |
+
+## How the multisig works here (GIWA has no Safe web app)
+
+1. Any admin creates a **proposal** (for example "Withdraw all ETH from the FeeVault to the Safe"). Nothing moves yet.
+2. Each Safe owner signs in with their owner wallet and presses **Sign**. The wallet shows a `SafeTx` signature request with
+   the Safe, target, data and nonce. Signing costs no gas.
+3. When enough owners signed, any owner presses **Execute** (the last owner can press **Sign & execute**: sending the
+   transaction counts as their approval). The Safe checks every signature again on-chain.
+
+Before anything is signed or executed, the browser decodes the call itself, re-encodes it, and checks that its own hash, the
+proposal's hash and the Safe's `getTransactionHash` all match. Only the listed actions on the pinned STABLE contracts can be
+proposed; delegatecall, arbitrary contracts, threshold 1 and non-WETH token withdrawals are refused by both the browser and the API.
+A signed proposal can't be deleted (its signatures stay valid on-chain): use **Reject on-chain**, a no-op at the same nonce.
+
+Owner wallets need panel access to sign: add them in Team, or press **Give access** next to an owner in Multisig.
 
 ## Who can sign in
 
@@ -31,9 +62,3 @@ Backend `.env` must include `ADMIN_ORIGINS=http://localhost:5174` (and your prod
 - **Everyone else:** wallets added in the Team tab or with `db/03_first_admin.sql`.
 
 The role is checked on every request, and admin actions need a wallet sign-in from the last 12 hours.
-
-| Tab | Role |
-|---|---|
-| Overview, Support tickets | support |
-| Collections, Import from GIWA, Contracts & fees, Audit log | admin |
-| Network (switch to mainnet), Team | owner |
