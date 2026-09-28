@@ -11,7 +11,7 @@ import { ctxFor, decodeCall, ethText, pinsProblem, prevOwnerOf } from '../lib/sa
 import { useProposals, useSafeActions, useSafeInfo } from '../lib/useSafe';
 import { useAuthedApi, useTx } from '../lib/tx';
 import { ProposalCard, proposalStatus } from '../components/ProposalCard';
-import { Address, Alert, Card, EmptyState, Modal, Segmented, Skeleton, Status, explorer, useDialog, useToast } from '../components/ui';
+import { Address, Alert, Card, EmptyState, LoadError, Modal, Segmented, Skeleton, Status, explorer, useDialog, useToast } from '../components/ui';
 import { IconAlert, IconCheck, IconExternal, IconInfo, IconKey, IconPause, IconPen, IconShield, IconUsers, IconWarning } from '../components/Icons';
 
 const lc = (x?: string | null) => (x || '').toLowerCase();
@@ -29,7 +29,8 @@ export default function Multisig({ role }: PageProps) {
   const s = status.data;
 
   if (status.isLoading) return <div className="stack-lg"><Skeleton h={170} r={18} /><div className="grid-main"><Skeleton h={320} r={18} /><Skeleton h={320} r={18} /></div></div>;
-  if (!s?.ready) return <Alert tone="warning" title="Contracts are not set">Add the marketplace address in the Network settings.</Alert>;
+  if (status.isError) return <LoadError error={status.error} what="the multisig status" retry={() => status.refetch()} />;
+  if (!s?.ready) return <Alert tone="warning" title="Contracts are not set">The API has no marketplace address. Set MARKET_ADDRESS on Railway.</Alert>;
   if (!s.safe) {
     return (
       <div className="stack-lg">
@@ -79,7 +80,7 @@ export default function Multisig({ role }: PageProps) {
         <div className="stack-lg">
           <Card title="Transaction queue" sub={`Executed strictly in nonce order. The next one is #${safe.nonce}.`}
             right={<span className="small soft">{pending.length} pending</span>}>
-            {queue.isLoading ? <Skeleton h={160} r={14} /> : pending.length === 0 ? (
+            {queue.isError ? <LoadError error={queue.error} what="the proposal queue" retry={() => queue.refetch()} /> : queue.isLoading ? <Skeleton h={160} r={14} /> : pending.length === 0 ? (
               <EmptyState icon={<IconShield size={22} />} title="Nothing waiting" body="Proposals from Treasury, Collections and Contracts appear here for owners to sign." />
             ) : (
               <div>{pending.map((p) => <ProposalCard key={p.id} p={p} info={info.data} actions={actions} laterCount={pending.filter((x) => Number(x.nonce) > Number(p.nonce)).length} />)}</div>

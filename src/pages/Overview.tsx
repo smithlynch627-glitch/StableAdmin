@@ -9,7 +9,7 @@ import { ethText } from '../lib/safe';
 import { useProposals, useSafeInfo } from '../lib/useSafe';
 import { useAuthedApi } from '../lib/tx';
 import { ColumnChart, ethFigure } from '../components/Chart';
-import { Card, EmptyState, Skeleton, Stat, Status } from '../components/ui';
+import { Card, EmptyState, Skeleton, Stat, Status, explainError } from '../components/ui';
 import { actionIcon, actionTitle } from './Logs';
 import {
   IconActivity, IconAlert, IconBag, IconCheckCircle, IconChevronRight, IconCoins, IconLayers, IconLifebuoy, IconPause, IconPen, IconShield, IconSwap, IconUsers, IconVault,
@@ -47,6 +47,10 @@ export default function Overview({ role, go }: PageProps) {
   if (m?.paused) attention.push({ icon: <IconPause size={16} />, title: 'Trading is paused', sub: 'Buys and offer acceptances are stopped.', to: 'contracts', tone: 'danger' });
   if (pausedFactories.length) attention.push({ icon: <IconPause size={16} />, title: 'Launches are paused', sub: `${pausedFactories.length} launchpad factory paused`, to: 'contracts', tone: 'warning' });
   if (d.tickets.open) attention.push({ icon: <IconLifebuoy size={16} />, title: `${d.tickets.open} open support ticket${d.tickets.open > 1 ? 's' : ''}`, sub: `${d.tickets.waiting} waiting on the user`, to: 'support', tone: 'neutral' });
+  if (funds.isError || safeStatus.isError) {
+    const err = funds.isError ? funds.error : safeStatus.error;
+    attention.unshift({ icon: <IconAlert size={16} />, title: 'Treasury and multisig data could not load', sub: explainError(err), to: funds.isError ? 'treasury' : 'multisig', tone: 'danger' });
+  }
   if (d.network.status?.degraded) attention.push({ icon: <IconAlert size={16} />, title: 'The indexer is behind', sub: 'Check the RPC and the indexer on Railway.', to: 'network', tone: 'danger' });
 
   return (
@@ -70,7 +74,7 @@ export default function Overview({ role, go }: PageProps) {
           </button>
           <button className="stat stat--link" onClick={() => go('treasury')}>
             <span className="stat__label"><span className="stat__icon"><IconVault size={16} /></span>FeeVault</span>
-            <span className="stat__value">{funds.data?.ready ? ethText(funds.data.vault.eth) : '…'}<small>ETH</small></span>
+            <span className="stat__value">{funds.data?.ready ? ethText(funds.data.vault.eth) : funds.isError ? '—' : '…'}{funds.data?.ready && <small>ETH</small>}</span>
             <span className="stat__sub">{funds.data?.ready ? `${ethText(funds.data.vault.weth)} WETH ready to withdraw` : ' '}</span>
           </button>
         </div>
@@ -99,7 +103,7 @@ export default function Overview({ role, go }: PageProps) {
                 {attention.map((a, i) => (
                   <a key={i} href={`#/${a.to}`} className="list-item" style={{ cursor: 'pointer' }}>
                     <span className="list-item__icon" style={a.tone === 'danger' ? { background: 'var(--bad-bg)', color: 'var(--bad)' } : a.tone === 'warning' ? { background: 'var(--warn-bg)' } : undefined}>{a.icon}</span>
-                    <div className="list-item__main"><span className="list-item__title">{a.title}</span><span className="list-item__sub ellipsis">{a.sub}</span></div>
+                    <div className="list-item__main"><span className="list-item__title">{a.title}</span><span className={`list-item__sub ${a.tone === 'danger' ? '' : 'ellipsis'}`}>{a.sub}</span></div>
                     <IconChevronRight size={16} />
                   </a>
                 ))}

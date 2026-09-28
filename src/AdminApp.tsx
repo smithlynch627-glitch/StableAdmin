@@ -11,7 +11,7 @@ import { Address, FloatingMenu, Skeleton, explorer, useToast } from './component
 import { useWalletUI } from './components/Wallet';
 import {
   IconCopy, IconDownload, IconExternal, IconHome, IconLayers, IconLifebuoy, IconLock, IconLogs, IconLogoutAlt, IconMenu, IconMoon, IconNetwork,
-  IconSettings, IconShield, IconSliders, IconSun, IconUsers, IconVault, IconWallet,
+  IconPen, IconSettings, IconShield, IconSliders, IconStar, IconSun, IconUsers, IconVault, IconWallet,
 } from './components/Icons';
 import Overview from './pages/Overview';
 import Treasury from './pages/Treasury';
@@ -22,12 +22,14 @@ import Contracts from './pages/Contracts';
 import Support from './pages/Support';
 import Logs from './pages/Logs';
 import SiteSettings from './pages/SiteSettings';
+import BrandingPage from './pages/Branding';
+import LegalPages from './pages/LegalPages';
 import Team from './pages/Team';
 import Network from './pages/Network';
 
 const LOGO = 'https://res.cloudinary.com/t1gjf2kf/image/upload/v1790232900/giwa_cow_logo.jpg';
 
-export type Route = 'overview' | 'treasury' | 'multisig' | 'collections' | 'import' | 'contracts' | 'support' | 'logs' | 'settings' | 'team' | 'network';
+export type Route = 'overview' | 'treasury' | 'multisig' | 'collections' | 'import' | 'contracts' | 'support' | 'logs' | 'settings' | 'branding' | 'legal' | 'team' | 'network';
 export interface PageProps { role: Role; go: (r: Route) => void }
 type NavItem = { id: Route; label: string; icon: ComponentType<{ size?: number }>; min: Role; title: string; sub: string; page: ComponentType<PageProps> };
 
@@ -50,6 +52,8 @@ const NAV: { group: string; items: NavItem[] }[] = [
   ] },
   { group: 'Settings', items: [
     { id: 'settings', label: 'Site settings', icon: IconSettings, min: 'admin', title: 'Site settings', sub: 'Community links on the website', page: SiteSettings },
+    { id: 'branding', label: 'Logo & artwork', icon: IconStar, min: 'admin', title: 'Logo & artwork', sub: 'Site logo and GIWA COWS images, live without a redeploy', page: BrandingPage },
+    { id: 'legal', label: 'Legal pages', icon: IconPen, min: 'admin', title: 'Legal pages', sub: 'Terms of Use and Privacy Policy in English and Korean', page: LegalPages },
     { id: 'team', label: 'Team', icon: IconUsers, min: 'owner', title: 'Team', sub: 'Who can open this panel', page: Team },
     { id: 'network', label: 'Network', icon: IconNetwork, min: 'owner', title: 'Network', sub: 'Chain, RPC and contract addresses', page: Network },
   ] },

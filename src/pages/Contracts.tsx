@@ -7,7 +7,7 @@ import { useChainInfo } from '../lib/queries';
 import { ethText } from '../lib/safe';
 import { useOwnerAction, useSafeInfo } from '../lib/useSafe';
 import { useTx } from '../lib/tx';
-import { Address, Alert, Card, Skeleton, Status, useDialog } from '../components/ui';
+import { Address, Alert, Card, LoadError, Skeleton, Status, useDialog } from '../components/ui';
 import { IconLayers, IconPause, IconPlay, IconSwap, IconVault } from '../components/Icons';
 
 const lc = (x?: string | null) => (x || '').toLowerCase();
@@ -46,7 +46,8 @@ export default function Contracts({ go }: PageProps) {
   const { address } = useAccount();
   const d = chain.data;
   if (chain.isLoading) return <div className="stack-lg"><Skeleton h={220} r={18} /><Skeleton h={220} r={18} /></div>;
-  if (!d?.ready) return <Alert tone="warning" title="Contracts are not set">Add the contract addresses in the Network settings.</Alert>;
+  if (chain.isError) return <LoadError error={chain.error} what="the contracts" retry={() => chain.refetch()} />;
+  if (!d?.ready) return <Alert tone="warning" title="Contracts are not set">The API has no contract addresses. Set MARKET_ADDRESS, LAUNCHPAD_FACTORY_ADDRESS and FEE_VAULT_ADDRESS on Railway.</Alert>;
   const m = d.market;
   const market = stableContracts().market || m.address;
   const isGuardian = !!d.guardian && lc(d.guardian) === lc(address);
@@ -87,7 +88,7 @@ export default function Contracts({ go }: PageProps) {
         </div>
       </Card>
 
-      {d.factories.map((f, i) => (
+      {(d.factories || []).map((f, i) => (
         <Card key={f.address} title={<><IconLayers size={17} />Launchpad factory{d.factories.length > 1 ? ` ${i + 1}` : ''}{f.current && <span className="tag">current</span>}</>}
           sub={f.current ? 'New collections are created here' : 'Earlier version: its collections keep trading'}
           right={f.paused ? <Status tone="warning" icon={<IconPause size={13} />}>Launches paused</Status> : <Status tone="good">Live</Status>}>

@@ -9,7 +9,7 @@ import { ctxFor, decodeCall, ethText, pinsProblem, type Proposal } from '../lib/
 import { useOwnerAction, useProposals, useSafeActions, useSafeInfo } from '../lib/useSafe';
 import { ColumnChart, ethFigure } from '../components/Chart';
 import { ProposalCard, proposalStatus } from '../components/ProposalCard';
-import { Address, Alert, Card, EmptyState, Segmented, Skeleton, Stat, Status, explorer } from '../components/ui';
+import { Address, Alert, Card, EmptyState, LoadError, Segmented, Skeleton, Stat, Status, explorer } from '../components/ui';
 import { IconArrowDown, IconCoins, IconExternal, IconSend, IconShield, IconVault, IconActivity } from '../components/Icons';
 
 const lc = (x?: string | null) => (x || '').toLowerCase();
@@ -30,7 +30,8 @@ export default function Treasury({ go }: PageProps) {
   const chart = useMemo(() => (f?.daily || []).map((d) => ({ label: d.day, value: Number(formatEther(BigInt(d.value))) })), [f?.daily]);
 
   if (funds.isLoading) return <div className="stack-lg"><div className="stats">{[0, 1, 2, 3].map((i) => <Skeleton key={i} h={112} r={18} />)}</div><Skeleton h={320} r={18} /></div>;
-  if (!f?.ready) return <Alert tone="warning" title="Contracts are not set">Add the FeeVault and marketplace addresses in the Network settings.</Alert>;
+  if (funds.isError) return <LoadError error={funds.error} what="the treasury" retry={() => funds.refetch()} />;
+  if (!f?.ready) return <Alert tone="warning" title="Contracts are not set">The API has no FeeVault or marketplace address. Set FEE_VAULT_ADDRESS and MARKET_ADDRESS on Railway.</Alert>;
   const earned = BigInt(f.earnings.mint_wei) + BigInt(f.earnings.trade_wei);
 
   return (
@@ -58,7 +59,8 @@ export default function Treasury({ go }: PageProps) {
 
           <Card title="Withdrawal status" sub={safe ? 'Withdrawals and transfers waiting for signatures, and what happened to recent ones' : 'Recent withdrawals'}
             right={safe && <button className="btn btn--sm btn--outline" onClick={() => go('multisig')}>Full queue</button>}>
-            {moneyQueue.length === 0 && moneyHistory.length === 0 && (
+            {queue.isError && <LoadError error={queue.error} what="the proposal queue" retry={() => queue.refetch()} />}
+            {!queue.isError && moneyQueue.length === 0 && moneyHistory.length === 0 && (
               <EmptyState icon={<IconArrowDown size={22} />} title="No withdrawals yet" body="Create one with the form on this page. Owners sign it here, then any owner executes it." />
             )}
             {moneyQueue.map((p) => <ProposalCard key={p.id} p={p} info={info.data} actions={actions} laterCount={(queue.data?.proposals || []).filter((x) => Number(x.nonce) > Number(p.nonce)).length} />)}

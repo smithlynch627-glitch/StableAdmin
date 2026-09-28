@@ -171,6 +171,20 @@ export function Alert({ tone = 'neutral', title, children, action, icon }: { ton
   );
 }
 
+/** Explains why a panel section could not load (instead of guessing), with a retry button. */
+export function explainError(error: unknown): string {
+  const e = error as { status?: number; message?: string };
+  if (e?.status === 404) return 'The API on Railway does not have this part of the admin panel yet. Push the updated backend (stable-backend.zip) and wait until Railway shows the new deployment as active.';
+  return e?.message || 'Unknown error';
+}
+export function LoadError({ error, what, retry }: { error: unknown; what: string; retry?: () => void }) {
+  return (
+    <Alert tone="danger" title={`Could not load ${what}`} action={retry && <button className="btn btn--sm btn--outline" onClick={retry}>Retry</button>}>
+      {explainError(error)}
+    </Alert>
+  );
+}
+
 // ── Status pill (icon + label, never colour alone) ─────────────────────────────────────────────────
 export function Status({ tone = 'neutral', children, icon }: { tone?: Tone | 'solid'; children: ReactNode; icon?: ReactNode }) {
   const ic = icon ?? (tone === 'good' ? <IconCheckCircle size={14} /> : tone === 'warning' ? <IconWarning size={14} /> : tone === 'danger' ? <IconXCircle size={14} /> : null);
