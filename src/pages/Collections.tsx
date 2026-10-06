@@ -156,8 +156,10 @@ export default function Collections({ go }: PageProps) {
 }
 
 type AboutItem = { label: string; value: string };
-type FullCollection = Collection & { telegram?: string | null; about?: string | null; about_image_url?: string | null; about_items?: AboutItem[] };
-const toHttp = (u: string) => (u.startsWith('ipfs://') ? `https://ipfs.io/ipfs/${u.slice(7)}` : u);
+type FullCollection = Collection & { telegram?: string | null; about?: string | null; about_image_url?: string | null; about_items?: AboutItem[]; gallery?: string[] };
+const toHttp = (u: string) => (u.startsWith('ipfs://') ? `https://ipfs.io/ipfs/${u.slice(7).replace(/^ipfs\//, '')}` : u.startsWith('ar://') ? `https://arweave.net/${u.slice(5)}` : u);
+const IMAGE_LINK = /^(https:\/\/|ipfs:\/\/|ar:\/\/)\S+$/i;
+const MAX_EXTRA = 3;
 const LABELS: Record<string, string> = { name: 'Name', slug: 'URL slug', description: 'Short description (collection header)', image_url: 'Logo image URL', banner_url: 'Banner image URL', twitter: 'X (Twitter)', discord: 'Discord', telegram: 'Telegram', website: 'Website' };
 
 function EditCollection({ c, onClose, onSave }: { c: Collection; onClose: () => void; onSave: (b: Record<string, unknown>) => Promise<unknown> | void }) {
@@ -171,7 +173,11 @@ function EditCollection({ c, onClose, onSave }: { c: Collection; onClose: () => 
   const details = f ?? { name: src.name, slug: src.slug, description: src.description || '', image_url: src.image_url || '', banner_url: src.banner_url || '', twitter: src.twitter || '', discord: src.discord || '', telegram: src.telegram || '', website: src.website || '' };
   const ab = about ?? { text: src.about || '', image: src.about_image_url || '', items: src.about_items || [] };
   const setItems = (items: AboutItem[]) => setAbout({ ...ab, items });
-  const validImage = !ab.image || /^(https?:\/\/|ipfs:\/\/)\S+$/i.test(ab.image.trim());
+  // Up to three extra images shown beside the logo on the mint page (the creator can also set them in the Studio).
+  const [extra, setExtra] = useState<string[] | null>(null);
+  const gallery = extra ?? [...(src.gallery || []), '', '', ''].slice(0, MAX_EXTRA);
+  const badExtra = gallery.some((x) => x.trim() && !IMAGE_LINK.test(x.trim()));
+  const validImage = !ab.image || IMAGE_LINK.test(ab.image.trim());
 
   async function save() {
     setSaving(true);
@@ -181,6 +187,8 @@ function EditCollection({ c, onClose, onSave }: { c: Collection; onClose: () => 
         ...details, image_url: nul(details.image_url), banner_url: nul(details.banner_url), twitter: nul(details.twitter), discord: nul(details.discord),
         telegram: nul(details.telegram), website: nul(details.website),
         about: nul(ab.text), about_image_url: nul(ab.image), about_items: ab.items.filter((x) => x.label.trim() && x.value.trim()),
+        // only sent when edited, so saving other fields never depends on the extra-images database update
+        ...(extra ? { gallery: [...new Set(extra.map((x) => x.trim()).filter(Boolean))] } : {}),
       });
     } finally {
       setSaving(false);
@@ -200,6 +208,27 @@ function EditCollection({ c, onClose, onSave }: { c: Collection; onClose: () => 
                 : <input id={`ed-${k}`} className="input" value={details[k]} onChange={(e) => setF({ ...details, [k]: e.target.value })} />}
             </div>
           ))}
+          <div className="field edit-grid__wide">
+            <span className="label">Extra images (mint page) <span className="muted">· up to {MAX_EXTRA}, any format including GIF</span></span>
+            <ol className="art-list">
+              {gallery.map((link, i) => {
+                const v = link.trim();
+                const ok = !!v && IMAGE_LINK.test(v);
+                return (
+                  <li className="art-row" key={i}>
+                    <span className="art-row__n mono">{String(i + 1).padStart(2, '0')}</span>
+                    <div className="img-preview img-preview--thumb">{ok && <img key={v} src={toHttp(v)} alt="" onError={(e) => ((e.target as HTMLImageElement).style.opacity = '0.15')} />}</div>
+                    <input className={`input ${v && !ok ? 'input--invalid' : ''}`} value={link} spellCheck={false} placeholder="https://…  ·  ipfs://…  ·  ar://…" aria-label={`Extra image ${i + 1} link`}
+                      onChange={(e) => setExtra(gallery.map((x, j) => (j === i ? e.target.value : x)))} />
+                    <div className="art-row__actions">
+                      <button className="btn btn--sm btn--ghost" disabled={!link} onClick={() => setExtra(gallery.map((x, j) => (j === i ? '' : x)))}>Clear</button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+            <span className="hint">{badExtra ? 'Use links that start with https://, ipfs:// or ar://' : 'Shown next to the logo on the mint page. The main image stays first.'}</span>
+          </div>
         </div>
       ) : (
         <div className="about-edit">
@@ -244,7 +273,7 @@ function EditCollection({ c, onClose, onSave }: { c: Collection; onClose: () => 
       )}
       <div className="row" style={{ gap: 10 }}>
         <button className="btn btn--outline" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
-        <button className="btn" style={{ flex: 2 }} disabled={saving || !validImage || full.isLoading} onClick={save}>{saving && <span className="spinner" />}Save changes</button>
+        <button className="btn" style={{ flex: 2 }} disabled={saving || !validImage || badExtra || full.isLoading} onClick={save}>{saving && <span className="spinner" />}Save changes</button>
       </div>
     </Modal>
   );
